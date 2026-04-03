@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrated Medical Diagnostic System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
+        .glass-panel { background: #1e293b; border: 1px solid #164e63; box-shadow: 0 0 15px rgba(6,182,212,0.15); }
+    </style>
+</head>
+<body class="min-h-screen p-8">
+    <header class="flex items-center gap-3 mb-10 border-b border-cyan-800 pb-4">
+        <h1 class="text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+            ⚕️ INTEGRATED MEDICAL DIAGNOSTIC SYSTEM
+        </h1>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="glass-panel p-6 rounded-xl">
+            <h2 class="text-xl font-semibold mb-6 text-cyan-300">System Inputs</h2>
+            <form id="diagForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-cyan-600 mb-1 uppercase tracking-wide">Patient Name</label>
+                    <input type="text" id="name" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-cyan-100 focus:outline-none focus:border-cyan-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm text-cyan-600 mb-1 uppercase tracking-wide">Symptoms (Optional if uploading report)</label>
+                    <textarea id="symptoms" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-cyan-100 focus:outline-none focus:border-cyan-500 h-24" placeholder="e.g., rash, fever, fatigue"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-cyan-600 mb-1 uppercase tracking-wide">Upload Lab Report (Cloud OCR)</label>
+                    <input type="file" id="report_image" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-cyan-900 file:text-cyan-100 hover:file:bg-cyan-800">
+                </div>
+                <button type="submit" id="submitBtn" class="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-4 rounded transition-all shadow-lg mt-4">
+                    INITIALIZE DIAGNOSIS
+                </button>
+            </form>
+        </div>
+
+        <div class="glass-panel p-6 rounded-xl flex flex-col">
+            <h2 class="text-xl font-semibold mb-6 text-cyan-300">Clinical Analysis</h2>
+            
+            <div id="results" class="hidden space-y-4 flex-grow">
+                
+                <div class="p-4 bg-slate-900 border-l-4 border-red-500 rounded">
+                    <h3 class="font-bold text-red-400 mb-1">Predicted Imbalance</h3>
+                    <p id="res-prediction" class="text-3xl font-light tracking-wide"></p>
+                    <p class="text-xs text-slate-500 mt-2">Combined Diagnostic Triggers: <span id="res-debug" class="text-cyan-600"></span></p>
+                </div>
+
+                <div class="p-4 bg-slate-900 border-l-4 border-purple-500 rounded">
+                    <h3 class="font-bold text-purple-400 mb-1">Document Intelligence</h3>
+                    <p id="res-report-analysis" class="text-sm text-slate-300"></p>
+                </div>
+
+                <div class="p-4 bg-slate-900 border-l-4 border-cyan-500 rounded">
+                    <h3 class="font-bold text-cyan-400 mb-1">Recommended Action</h3>
+                    <p id="res-action" class="text-sm text-slate-300"></p>
+                </div>
+
+                <div class="p-4 bg-black rounded overflow-y-auto max-h-24 text-xs font-mono text-green-500 border border-slate-800 mt-auto">
+                    <p class="mb-2 text-slate-500">// RAW DOCUMENT TEXT</p>
+                    <p id="res-ocr"></p>
+                </div>
+            </div>
+            
+            <div id="loading" class="hidden h-full flex items-center justify-center text-cyan-600 animate-pulse uppercase tracking-widest text-sm py-10">
+                Processing Telemetry...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('diagForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const symptomsVal = document.getElementById('symptoms').value.trim();
+            const fileInput = document.getElementById('report_image');
+            
+            // Validation: Ensure at least one input is provided
+            if (symptomsVal === "" && fileInput.files.length === 0) {
+                alert("Please provide either typed symptoms OR upload a medical report.");
+                return;
+            }
+
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('submitBtn').disabled = true;
+
+            const formData = new FormData();
+            formData.append('patient_name', document.getElementById('name').value);
+            formData.append('symptoms', symptomsVal);
+            
+            if (fileInput.files.length > 0) {
+                formData.append('report_image', fileInput.files[0]);
+            }
+
+            try {
+                const response = await fetch('/api/diagnose', { method: 'POST', body: formData });
+                const json = await response.json();
+                
+                document.getElementById('res-prediction').textContent = json.data.predicted_condition;
+                document.getElementById('res-report-analysis').textContent = json.data.report_analysis;
+                document.getElementById('res-action').textContent = json.data.recommendations.medical_action;
+                
+                document.getElementById('res-ocr').textContent = json.data.ocr_extracted_text || "No document uploaded.";
+                
+                const matched = json.data.matched_symptoms_debug;
+                document.getElementById('res-debug').textContent = matched.length > 0 ? matched.join(", ") : "None recognized.";
+                
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('results').classList.remove('hidden');
+            } catch (err) {
+                alert("Error connecting to server. Make sure the Python backend is running.");
+                document.getElementById('loading').classList.add('hidden');
+            }
+            document.getElementById('submitBtn').disabled = false;
+        });
+    </script>
+</body>
+</html>
